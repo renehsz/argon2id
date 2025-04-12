@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/renehsz/go-meminfo"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -33,22 +34,43 @@ var (
 	ErrIncompatibleVersion = errors.New("argon2id: incompatible version of argon2")
 )
 
-// DefaultParams provides some sane default parameters for hashing passwords.
+// RecommendedParams provides some sane default parameters for hashing passwords.
 //
-// Follows recommendations given by the Argon2 RFC:
-// "The Argon2id variant with t=1 and maximum available memory is RECOMMENDED as a
-// default setting for all environments. This setting is secure against side-channel
-// attacks and maximizes adversarial costs on dedicated bruteforce hardware.""
+// It follows recommendations given by the Argon2 RFC:
+// "The Argon2id variant with t=1 and 2 GiB memory is the FIRST RECOMMENDED option
+// and is suggested as a default setting for all environments. This setting is secure
+// against side-channel attacks and maximizes adversarial costs on dedicated brute-
+// force hardware. The Argon2id variant with t=3 and 64 MiB memory is the SECOND
+// RECOMMENDED option and is suggested as a default setting for memory-constrained
+// environments."
 //
-// The default parameters should generally be used for development/testing purposes
-// only. Custom parameters should be set for production applications depending on
-// available memory/CPU resources and business requirements.
-var DefaultParams = &Params{
-	Memory:      64 * 1024,
-	Iterations:  1,
-	Parallelism: uint8(runtime.NumCPU()),
-	SaltLength:  16,
-	KeyLength:   32,
+// We use the FIRST RECOMMENDED option on systems with at least 4 GiB of memory
+// available (to leave some headroom), and the SECOND RECOMMENDED option as a fallback.
+func RecommendedParams() *Params {
+	// Only use the first recommended option if we have at least 4 GiB of memory
+	// available to be allocated. Otherwise, play it safe and use the second option.
+	memInfo, err := meminfo.Get()
+	useMoreMemory := (err == nil && memInfo.Available >= 4*1024*1024*1024)
+
+	if useMoreMemory {
+		// FIRST RECOMMENDED option
+		return &Params{
+			Memory:      2048 * 1024,
+			Iterations:  1,
+			Parallelism: uint8(runtime.NumCPU()),
+			SaltLength:  16,
+			KeyLength:   32,
+		}
+	}
+
+	// SECOND RECOMMENDED option
+	return &Params{
+		Memory:      64 * 1024,
+		Iterations:  3,
+		Parallelism: uint8(runtime.NumCPU()),
+		SaltLength:  16,
+		KeyLength:   32,
+	}
 }
 
 // Params describes the input parameters used by the Argon2id algorithm. The
